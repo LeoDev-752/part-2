@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import personService from './services/person';
+import personService from './services/person'
 
 const Filter = ({ searchTerm, handleSearchChange }) => (
   <div>
@@ -29,11 +29,38 @@ const ShowPersons = ({ personsToShow, removePerson }) => (
   </ul>
 )
 
+const Notification = ({ message, type }) => {
+  if (message === null) {
+    return null
+  }
+
+  const notificationStyle = {
+    color: type === 'error' ? 'red' : 'green',
+    fontStyle: 'italic',
+    fontSize: 30,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 3,
+    margin: 5,
+    padding: 10,
+    border: `2px solid ${type === 'error' ? 'red' : 'green'}`,
+  }
+
+  return (
+    <div style={notificationStyle}>
+      {message}
+    </div>
+  )
+}
+
 const App = (props) => {
+  // El efecto se ejecuta después de la 1era renderización por eso los estados estan vacíos y no nulos
   const [persons, setPersons] = useState([])
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  // Los mensajes deben ser nulos para que no carguen los diseños css mientras no haya mensaje (tengo un control para que no peten si son null)
+  const [message, setMessage] = useState(null)
+  const [errorMessage, setErrorMessage] = useState(null)
 
   useEffect(() => {
     personService
@@ -55,38 +82,53 @@ const App = (props) => {
     setSearchTerm(event.target.value)
   }
 
+  // Se llama addname pero añade a una persona
   const addName = (event) => {
     event.preventDefault()
-    const personObject = {
-      name: newName,
-      number: newNumber
-    }
+    const personObject = { name: newName, number: newNumber }
 
-    if (persons.some(person => person.name === newName)) {
-      window.alert(`${newName} is already added to phonebook`)
+    const existingPerson = persons.find(person => person.name === newName) // tuve que definir una variable donde guardo la informacion del callback para poder utilizarla más abajo
+    console.log(existingPerson)
+    if (existingPerson) {
+      if (window.confirm(`${existingPerson.name} is already added to phonebook, please replace the old number with a new one?`)) {
+        const updatePerson = { ...existingPerson, number: newNumber }
+
+        personService
+          .update(existingPerson.id, updatePerson)
+          .then(response => {
+            setPersons(persons.map(person => person.id !== existingPerson.id ? person : response.data))
+            setMessage(`Updated ${newName}`)
+            setNewName('')
+            setNewNumber('')
+            setTimeout(() => setMessage(null), 5000)
+          })
+      }
     } else {
       personService
         .create(personObject)
         .then(returnedPerson => {
-          console.log(returnedPerson)
           setPersons(persons.concat(returnedPerson))
+          setMessage(`Added ${newName}`)
           setNewName('')
           setNewNumber('')
+          setTimeout(() => setMessage(null), 5000)
         })
     }
   }
 
   const removePerson = (id) => {
-    if (window.confirm("¿Estás seguro de que deseas eliminar esta persona?")) {
+    const personToRemove = persons.find(person => person.id === id)
+
+    if (window.confirm(`Delete ${personToRemove.name}?`)) {
       personService
         .remove(id)
         .then(() => {
-          setPersons(persons.filter(person => person.id !== id));
+          setPersons(persons.filter(person => person.id !== id))
         })
         .catch(error => {
-          console.error("Error al eliminar la persona:", error);
-          window.alert("Error al eliminar la persona. Inténtalo de nuevo.");
-        });
+          setErrorMessage(`Information of ${personToRemove.name} has already been removed from the server.`)
+          setTimeout(() => setErrorMessage(null), 5000)
+        })
     }
   }
 
@@ -98,6 +140,8 @@ const App = (props) => {
   return (
     <div>
       <h2>Phonebook</h2>
+      <Notification message={message} type="success" />
+      <Notification message={errorMessage} type="error" />
       <Filter searchTerm={searchTerm} handleSearchChange={handleSearchChange} />
       <h2>add a new</h2>
       <AddPersons
